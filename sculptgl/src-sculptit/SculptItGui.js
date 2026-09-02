@@ -66,7 +66,10 @@ var GIZMO_MODES = {
 // - remesh false: dünne Flügelmembranen überleben das Voxel-Remesh nicht
 //   (Flood-Fill leckt durch die Löcher) - dann nur Subdivision
 var STARTER_CONFIG = {
-  drache: { size: 1.45, remesh: false }
+  drache: { size: 1.45, remesh: false },
+  // die Büste ist unten offen - das Remesh franst die offene Halskante aus;
+  // das Modell ist ohnehin das sauberste (verschweißt, einteilig)
+  kopf: { remesh: false }
 };
 
 var SCULPT_TOOLS = [

@@ -1,6 +1,7 @@
 import Remesh from 'editing/Remesh';
 import Mesh from 'mesh/Mesh';
 import MeshStatic from 'mesh/meshStatic/MeshStatic';
+import Smooth from 'editing/tools/Smooth';
 
 // "Verbinden & Sculpten": alle Formen der Szene per Voxel-Remesh zu einem
 // sculptbaren Mesh verschmelzen. Das ist der vorhandene Multi-Mesh-Flow aus
@@ -44,6 +45,20 @@ var toStatic = function (mesh) {
 // (zackige Sculpt-Striche auf generierten Modellen).
 // Blockiert den Hauptthread für ~1-2s - der Aufrufer zeigt vorher das
 // Lade-Overlay und ruft uns per setTimeout auf.
+// tangentialer Glättungs-Pass über das ganze Mesh (wie Remesh.js intern) -
+// bei hoher Voxel-Auflösung reicht der eine eingebaute Pass nicht, es bleiben
+// Marching-Cubes-Terrassen als Streifen-Bänder auf großen Flächen sichtbar
+var smoothPass = function (mesh) {
+  var nbVertices = mesh.getNbVertices();
+  var indices = new Uint32Array(nbVertices);
+  for (var i = 0; i < nbVertices; ++i) indices[i] = i;
+  var smo = new Smooth();
+  smo.setToolMesh(mesh);
+  smo.smoothTangent(indices, 1.0);
+  mesh.updateGeometry();
+  mesh.updateGeometryBuffers();
+};
+
 Merge.remeshAll = function (main, resolution) {
   var meshes = main.getMeshes();
   if (meshes.length === 0)
@@ -57,6 +72,8 @@ Merge.remeshAll = function (main, resolution) {
   // manifold=true: MarchingCubes + tangentiales Smoothing (glatteres Ergebnis)
   var newMesh = Remesh.remesh(statics, statics[0], true);
   Remesh.RESOLUTION = keepRes;
+
+  smoothPass(newMesh);
 
   meshes.length = 0;
   main.getStateManager().pushStateAddRemove(newMesh, old);
