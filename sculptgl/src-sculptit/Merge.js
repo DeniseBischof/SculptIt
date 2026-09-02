@@ -11,10 +11,10 @@ var Merge = {};
 
 // Feste, kindgerechte Werte statt Slider. Zielgeräte sind iPads ab 2024
 // (M-Klasse) - die verkraften deutlich mehr als die konservativen Defaults.
-Merge.RESOLUTION = 120;
+Merge.RESOLUTION = 150;
 
 // Starter-Modelle beim Laden: fein, damit Gesichts-Details überleben
-Merge.STARTER_RESOLUTION = 200;
+Merge.STARTER_RESOLUTION = 230;
 
 // Dynamic-Topology-Meshes können nicht direkt in den Remesher
 // (gleiche Logik wie GuiTopology.convertToStaticMesh)
@@ -59,7 +59,10 @@ var smoothPass = function (mesh) {
   mesh.updateGeometryBuffers();
 };
 
-Merge.remeshAll = function (main, resolution) {
+// surfaceNets=true nutzt SurfaceNets statt MarchingCubes: SculptGLs Standard-
+// Remesher, erzeugt auf großen Flächen KEINE Terrassen-Streifen (das MC-
+// Stufenmuster blieb selbst nach extra Glättung als Schattenbänder sichtbar)
+Merge.remeshAll = function (main, resolution, surfaceNets) {
   var meshes = main.getMeshes();
   if (meshes.length === 0)
     return null;
@@ -69,8 +72,7 @@ Merge.remeshAll = function (main, resolution) {
 
   var keepRes = Remesh.RESOLUTION;
   Remesh.RESOLUTION = resolution || Merge.RESOLUTION;
-  // manifold=true: MarchingCubes + tangentiales Smoothing (glatteres Ergebnis)
-  var newMesh = Remesh.remesh(statics, statics[0], true);
+  var newMesh = Remesh.remesh(statics, statics[0], !surfaceNets);
   Remesh.RESOLUTION = keepRes;
 
   smoothPass(newMesh);
@@ -88,7 +90,7 @@ Merge.mergeAll = function (main) {
     return null;
   if (meshes.length === 1)
     return meshes[0]; // nichts zu verschmelzen
-  return Merge.remeshAll(main, Merge.RESOLUTION);
+  return Merge.remeshAll(main, Merge.RESOLUTION, true);
 };
 
 export default Merge;

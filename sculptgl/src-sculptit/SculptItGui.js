@@ -374,7 +374,7 @@ class SculptItGui {
               self._normalizeSize(newMeshes, cfg.size);
               main.setMesh(newMeshes[newMeshes.length - 1]);
             } else {
-              var mesh = Merge.remeshAll(main, Merge.STARTER_RESOLUTION);
+              var mesh = Merge.remeshAll(main, Merge.STARTER_RESOLUTION, true);
               if (mesh) self._normalizeSize([mesh], cfg.size);
             }
           } finally {
