@@ -35,6 +35,7 @@ var ICONS = {
   ziehen: svg('<path d="M3 19h5c1-6 4-8 8-8"/><path d="M16 5l4 4-4 4M20 9h-6"/>'),
   glaetten: svg('<path d="M3 14c3 0 3-4 6-4s3 4 6 4 3-4 6-4"/><path d="M3 19h18"/>'),
   falte: svg('<path d="M4 6l8 12L20 6"/>'),
+  anmalen: svg('<path d="M19 3l2 2-9.5 9.5-3 1 1-3L19 3z"/><path d="M4 21c1.5 0 2.5-.6 3-1.8.4-1-.2-2.4-1.4-2.6C4 16.3 3 17.5 3 19c0 1-.4 1.6-1 2h2z"/>'),
   undo: svg('<path d="M8 5L3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 6 6v3"/>'),
   redo: svg('<path d="M16 5l5 5-5 5"/><path d="M21 10H10a6 6 0 0 0-6 6v3"/>'),
   export: svg('<path d="M12 15V3M12 3L8 7M12 3l4 4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>'),
@@ -67,9 +68,11 @@ var GIZMO_MODES = {
 //   (Flood-Fill leckt durch die Löcher) - dann nur Subdivision
 var STARTER_CONFIG = {
   drache: { size: 1.45, remesh: false },
-  // die Büste ist unten offen - das Remesh franst die offene Halskante aus;
-  // das Modell ist ohnehin das sauberste (verschweißt, einteilig)
-  kopf: { remesh: false }
+  // kopf läuft wieder durchs Remesh: verschmilzt die aufgelegten Augen/Brauen
+  // mit dem Gesicht (die früheren Halskanten-Fransen stammten vom alten
+  // MarchingCubes-Pfad). Eigene Auflösung: er füllt sein Volumen so effizient,
+  // dass Standard-230 auf ~160k Quads explodiert
+  kopf: { resolution: 190 }
 };
 
 var SCULPT_TOOLS = [
@@ -77,7 +80,21 @@ var SCULPT_TOOLS = [
   { id: 'druecken', label: 'Eindrücken', tool: Enums.Tools.BRUSH, negative: true },
   { id: 'ziehen', label: 'Ziehen', tool: Enums.Tools.DRAG },
   { id: 'glaetten', label: 'Glätten', tool: Enums.Tools.SMOOTH },
-  { id: 'falte', label: 'Falte', tool: Enums.Tools.CREASE }
+  { id: 'falte', label: 'Falte', tool: Enums.Tools.CREASE },
+  { id: 'anmalen', label: 'Anmalen', tool: Enums.Tools.PAINT }
+];
+
+// kindgerechte Palette fürs Anmalen (RGB 0..1, Paint._color)
+var PAINT_COLORS = [
+  ['#e74c3c', [0.91, 0.30, 0.24]],
+  ['#e67e22', [0.90, 0.49, 0.13]],
+  ['#f6d743', [0.96, 0.84, 0.26]],
+  ['#2ecc71', [0.18, 0.80, 0.44]],
+  ['#3498db', [0.20, 0.60, 0.86]],
+  ['#9b59b6', [0.61, 0.35, 0.71]],
+  ['#8d6e63', [0.55, 0.43, 0.39]],
+  ['#ecf0f1', [0.93, 0.94, 0.95]],
+  ['#34495e', [0.20, 0.29, 0.37]]
 ];
 
 var el = function (tag, cls, html) {
@@ -239,9 +256,21 @@ class SculptItGui {
     sm.setToolIndex(cfg.tool);
     if (cfg.tool === Enums.Tools.BRUSH)
       sm.getTool(Enums.Tools.BRUSH)._negative = !!cfg.negative;
+    if (this._swatchRow)
+      this._swatchRow.classList.toggle('visible', cfg.tool === Enums.Tools.PAINT);
     this._setActiveButton(cfg.id);
     this._syncSliders();
     this._main.render();
+  }
+
+  setPaintColor(rgb, swatchEl) {
+    var paint = this._main.getSculptManager().getTool(Enums.Tools.PAINT);
+    paint._color[0] = rgb[0];
+    paint._color[1] = rgb[1];
+    paint._color[2] = rgb[2];
+    var swatches = this._swatchRow.children;
+    for (var i = 0; i < swatches.length; ++i)
+      swatches[i].classList.toggle('active', swatches[i] === swatchEl);
   }
 
   _selectBuildTool(id) {
@@ -374,7 +403,14 @@ class SculptItGui {
               self._normalizeSize(newMeshes, cfg.size);
               main.setMesh(newMeshes[newMeshes.length - 1]);
             } else {
-              var mesh = Merge.remeshAll(main, Merge.STARTER_RESOLUTION, true);
+              // die Low-Poly-Quelle (~5k) erst per Subdivision runden - sonst
+              // tastet das Voxelgrid ihre Polygon-Facetten ab und die Figur
+              // wirkt "beulig"
+              for (var j = 0; j < newMeshes.length; ++j) {
+                while (newMeshes[j].getNbFaces() < 60000 && newMeshes[j].addLevel)
+                  newMeshes[j].addLevel();
+              }
+              var mesh = Merge.remeshAll(main, cfg.resolution || Merge.STARTER_RESOLUTION, true);
               if (mesh) self._normalizeSize([mesh], cfg.size);
             }
           } finally {
@@ -650,6 +686,17 @@ class SculptItGui {
 
     bar.appendChild(sculptCtrls);
     bar.appendChild(el('div', 'sit-hint only-bauen', 'Tippe eine Form an und zieh die Pfeile · Drehen und Größe über die Knöpfe links'));
+
+    // Farbpalette (nur sichtbar, wenn Anmalen aktiv ist)
+    var swatchRow = this._swatchRow = el('div', 'sit-swatches only-kneten');
+    PAINT_COLORS.forEach(function (entry) {
+      var b = el('button', 'sit-swatch');
+      b.style.background = entry[0];
+      b.addEventListener('click', function () { self.setPaintColor(entry[1], b); });
+      swatchRow.appendChild(b);
+    });
+    this.setPaintColor(PAINT_COLORS[0][1], swatchRow.firstChild);
+    bar.appendChild(swatchRow);
 
     this._root.appendChild(bar);
   }
