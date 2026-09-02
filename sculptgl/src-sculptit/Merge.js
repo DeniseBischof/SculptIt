@@ -8,12 +8,12 @@ import MeshStatic from 'mesh/meshStatic/MeshStatic';
 // immer ALLE Meshes - einfacher und touch-tauglich.
 var Merge = {};
 
-// Fester, kindgerechter Wert statt Slider (SculptGL-Default 150 ist auf
-// alten Geräten zu langsam).
-Merge.RESOLUTION = 100;
+// Feste, kindgerechte Werte statt Slider. Zielgeräte sind iPads ab 2024
+// (M-Klasse) - die verkraften deutlich mehr als die konservativen Defaults.
+Merge.RESOLUTION = 120;
 
-// Starter-Modelle beim Laden: feiner, damit Gesichts-Details überleben
-Merge.STARTER_RESOLUTION = 150;
+// Starter-Modelle beim Laden: fein, damit Gesichts-Details überleben
+Merge.STARTER_RESOLUTION = 200;
 
 // Dynamic-Topology-Meshes können nicht direkt in den Remesher
 // (gleiche Logik wie GuiTopology.convertToStaticMesh)
