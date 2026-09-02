@@ -1,0 +1,421 @@
+/* SculptIt UI — liegt als Overlay über dem SculptGL-Canvas.
+   Ruhige Farben, eine Akzentfarbe (Ton/Terracotta), große Touch-Ziele. */
+
+:root {
+  --sit-bg: rgba(38, 38, 44, 0.92);
+  --sit-bg-solid: #26262c;
+  --sit-fg: #e8e6e3;
+  --sit-fg-dim: #9b9892;
+  --sit-accent: #e07850;
+  --sit-accent-dark: #c96540;
+  --sit-radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#viewport {
+  position: absolute;
+  inset: 0;
+}
+
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.sit-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* nur die Bars selbst fangen Events */
+  color: var(--sit-fg);
+  z-index: 10;
+}
+
+.sit-root > * { pointer-events: auto; }
+
+/* ---------- Buttons ---------- */
+
+.sit-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 64px;
+  min-height: 48px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--sit-radius);
+  background: transparent;
+  color: var(--sit-fg);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, transform 0.06s;
+}
+
+.sit-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.sit-btn:active { transform: scale(0.95); }
+
+.sit-btn.active {
+  background: var(--sit-accent);
+  color: #fff;
+}
+
+.sit-icon { display: block; width: 26px; height: 26px; }
+.sit-icon svg { width: 100%; height: 100%; }
+.sit-label { line-height: 1.1; text-align: center; }
+
+.sit-btn-flat { flex-direction: row; min-height: 44px; gap: 7px; font-size: 12px; }
+.sit-btn-flat .sit-icon { width: 20px; height: 20px; }
+
+.sit-btn-primary {
+  flex-direction: row;
+  min-height: 44px;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--sit-accent);
+  color: #fff;
+}
+.sit-btn-primary:hover { background: var(--sit-accent-dark); }
+
+/* ---------- Topbar ---------- */
+
+.sit-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  background: var(--sit-bg);
+  backdrop-filter: blur(8px);
+}
+
+.sit-brand {
+  font-size: 19px;
+  letter-spacing: 0.3px;
+  color: var(--sit-fg-dim);
+}
+.sit-brand b { color: var(--sit-fg); font-weight: 700; }
+
+.sit-history { display: flex; gap: 4px; margin-left: 8px; }
+
+.sit-topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sit-info { font-size: 12px; color: var(--sit-fg-dim); }
+
+.sit-export-wrap { position: relative; }
+
+.sit-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: none;
+  flex-direction: column;
+  min-width: 210px;
+  padding: 6px;
+  border-radius: var(--sit-radius);
+  background: var(--sit-bg-solid);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+.sit-export-menu.open { display: flex; }
+
+.sit-export-item {
+  padding: 12px 14px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--sit-fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.sit-export-item:hover { background: var(--sit-accent); color: #fff; }
+
+/* ---------- Linke Werkzeugleiste ---------- */
+
+.sit-toolbar {
+  position: absolute;
+  top: 70px;
+  bottom: 96px;
+  left: 12px;
+  width: 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: var(--sit-radius);
+  background: var(--sit-bg);
+  backdrop-filter: blur(8px);
+  /* die Leiste selbst scrollt nicht - nur die Werkzeugliste; der
+     Verbinden-Button bleibt so immer sichtbar */
+  overflow: hidden;
+}
+
+.sit-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.sit-mode-btn {
+  padding: 8px 4px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--sit-fg-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sit-mode-btn.active { background: rgba(255, 255, 255, 0.14); color: var(--sit-fg); }
+
+.sit-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sit-sep { height: 1px; margin: 4px 8px; background: rgba(255, 255, 255, 0.12); }
+
+.sit-btn-add .sit-icon { color: var(--sit-accent); }
+.sit-btn-add.active .sit-icon { color: #fff; }
+
+.sit-btn-merge {
+  margin-top: auto;
+  flex-shrink: 0;
+  min-height: 60px;
+  background: var(--sit-accent);
+  color: #fff;
+  font-weight: 700;
+}
+.sit-btn-merge:hover { background: var(--sit-accent-dark); }
+
+/* ---------- Untere Leiste ---------- */
+
+.sit-bottombar {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  min-height: 62px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--sit-bg);
+  backdrop-filter: blur(8px);
+}
+
+.sit-sliders { display: flex; align-items: center; gap: 22px; }
+
+.sit-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--sit-fg-dim);
+}
+
+.sit-slider input[type="range"] {
+  width: 150px;
+  height: 32px;
+  accent-color: var(--sit-accent);
+  cursor: pointer;
+}
+
+.sit-hint { font-size: 12px; color: var(--sit-fg-dim); padding: 4px 6px; }
+
+/* ---------- Modus-Sichtbarkeit ---------- */
+
+.sit-root[data-mode="bauen"] .only-kneten { display: none; }
+.sit-root[data-mode="kneten"] .only-bauen { display: none; }
+
+/* ---------- Start-Overlay ---------- */
+
+.sit-start {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 20, 24, 0.82);
+  backdrop-filter: blur(10px);
+  /* visibility mit Verzögerung: opacity allein lässt den backdrop-filter
+     in manchen Compositors weiterzeichnen */
+  transition: opacity 0.25s, visibility 0s 0.25s;
+}
+.sit-start.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
+
+.sit-start-box {
+  /* feste Breite, sonst kollabiert das auto-fit-Grid auf wenige Spalten */
+  width: min(720px, calc(100vw - 32px));
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  text-align: center;
+}
+
+.sit-start-title {
+  margin: 0 0 26px;
+  font-size: 26px;
+  font-weight: 650;
+  color: var(--sit-fg);
+}
+
+.sit-start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.sit-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 12px 16px;
+  border: none;
+  border-radius: 18px;
+  background: var(--sit-bg-solid);
+  color: var(--sit-fg);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s, transform 0.1s;
+}
+.sit-card:hover { background: #33333b; transform: translateY(-2px); }
+.sit-card:active { transform: scale(0.97); }
+
+.sit-card.disabled { opacity: 0.4; cursor: default; }
+.sit-card.disabled:hover { background: var(--sit-bg-solid); transform: none; }
+
+.sit-card-icon { width: 44px; height: 44px; color: var(--sit-accent); }
+.sit-card-icon svg { width: 100%; height: 100%; }
+.sit-card-label { font-size: 15px; font-weight: 600; }
+.sit-card-sub { font-size: 11px; color: var(--sit-fg-dim); }
+
+/* ---------- Lade-Overlay ---------- */
+
+.sit-loading {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 20, 24, 0.6);
+}
+.sit-loading.visible { display: flex; }
+
+.sit-loading-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 36px;
+  border-radius: 18px;
+  background: var(--sit-bg-solid);
+}
+
+.sit-spinner {
+  width: 38px;
+  height: 38px;
+  border: 4px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--sit-accent);
+  border-radius: 50%;
+  animation: sit-spin 0.9s linear infinite;
+}
+
+@keyframes sit-spin { to { transform: rotate(360deg); } }
+
+.sit-loading-text { font-size: 14px; color: var(--sit-fg); }
+
+/* ---------- Verbinden-Warnung ---------- */
+
+.sit-confirm {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 20, 24, 0.6);
+  backdrop-filter: blur(4px);
+}
+.sit-confirm.visible { display: flex; }
+
+.sit-confirm-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 380px;
+  margin: 16px;
+  padding: 26px 28px 22px;
+  border-radius: 18px;
+  background: var(--sit-bg-solid);
+  text-align: center;
+}
+
+.sit-confirm-icon { width: 46px; height: 46px; color: var(--sit-accent); }
+.sit-confirm-icon svg { width: 100%; height: 100%; }
+
+.sit-confirm-title { margin: 0; font-size: 19px; font-weight: 650; color: var(--sit-fg); }
+
+.sit-confirm-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sit-fg-dim);
+}
+
+.sit-confirm-row { display: flex; gap: 10px; margin-top: 10px; }
+
+.sit-btn-ghost {
+  flex-direction: row;
+  min-height: 44px;
+  padding: 6px 16px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.sit-btn-ghost:hover { background: rgba(255, 255, 255, 0.14); }
+
+/* ---------- Kleine Bildschirme ---------- */
+
+@media (max-width: 640px) {
+  .sit-btn { min-width: 56px; }
+  .sit-toolbar { width: 84px; }
+  .sit-history .sit-label, .sit-btn-primary .sit-label { display: none; }
+  .sit-slider input[type="range"] { width: 100px; }
+  .sit-info { display: none; }
+}

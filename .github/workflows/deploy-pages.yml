@@ -1,0 +1,53 @@
+# SculptIt → GitHub Pages
+# Repo-Layout: das SculptGL-Projekt liegt im Unterordner sculptgl/
+# Einmalig im Repo aktivieren: Settings → Pages → Source: "GitHub Actions"
+
+name: Deploy SculptIt to GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: sculptgl
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # --ignore-scripts überspringt den Electron-Binary-Download,
+      # den wir für den Web-Build nicht brauchen
+      - name: Build
+        run: |
+          npm ci --ignore-scripts
+          npx webpack
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: sculptgl/app
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
