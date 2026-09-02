@@ -41,7 +41,8 @@ var ICONS = {
   export: svg('<path d="M12 15V3M12 3L8 7M12 3l4 4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>'),
   verbinden: svg('<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>'),
   mensch: svg('<circle cx="12" cy="5.5" r="2.8"/><path d="M12 8.5v7M12 15.5l-3.5 5M12 15.5l3.5 5M7 11h10"/>'),
-  hund: svg('<circle cx="12" cy="11.5" r="6.5"/><path d="M6.9 6.3C4.2 7.1 3.5 11 5.5 13.6M17.1 6.3c2.7 .8 3.4 4.7 1.4 7.3"/><ellipse cx="12" cy="14" rx="2.7" ry="1.9"/><circle cx="12" cy="13.2" r="0.55" fill="currentColor"/>'),
+  // "dog" aus dem Lucide-Icon-Set (ISC-Lizenz, lucide.dev)
+  hund: svg('<path d="M11.25 16.25h1.5L12 17z"/><path d="M16 14v.5"/><path d="M4.42 11.247A13.152 13.152 0 0 0 4 14.556C4 18.728 7.582 21 12 21s8-2.272 8-6.444a11.702 11.702 0 0 0-.493-3.309"/><path d="M8 14v.5"/><path d="M8.5 8.5c-.384 1.05-1.083 2.028-2.344 2.5-1.931.722-3.576-.297-3.656-1-.113-.994 1.177-6.53 4-7 1.923-.321 3.651.845 3.651 2.235A7.497 7.497 0 0 1 14 5.277c0-1.39 1.844-2.598 3.767-2.277 2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.855-1.45-2.239-2.5"/>'),
   katze: svg('<circle cx="12" cy="13" r="6.5"/><path d="M7 9l-1-5 4 2.5M17 9l1-5-4 2.5"/>'),
   kreatur: svg('<circle cx="12" cy="13" r="6.5"/><path d="M8 7L5 3M16 7l3-4M9 3.5L8 7M15 3.5L16 7"/><circle cx="10" cy="12" r="0.5" fill="currentColor"/><circle cx="14" cy="12" r="0.5" fill="currentColor"/>'),
   oeffnen: svg('<path d="M3 8V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2"/><path d="M3 8h18l-2 11H5L3 8z"/>'),
@@ -66,13 +67,14 @@ var GIZMO_MODES = {
 //   sonst zu klein, weil die Bounding-Box aufgebläht ist)
 // - remesh false: dünne Flügelmembranen überleben das Voxel-Remesh nicht
 //   (Flood-Fill leckt durch die Löcher) - dann nur Subdivision
+// Starter laden per Default NUR mit Subdivision (verlustfrei fein): das
+// Voxel-Remesh zerfrisst jedes dünne Teil - Drachenflügel, Brauen/Lider,
+// Hunde-/Katzenschwanz. remesh:true nur für grundsolide Modelle, die davon
+// profitieren (Roboter: verschmilzt Panel-Shells, schärfere Kanten).
+// Details bewusst einschmelzen geht immer über "Verbinden & Sculpten".
 var STARTER_CONFIG = {
-  drache: { size: 1.45, remesh: false },
-  // kopf läuft wieder durchs Remesh: verschmilzt die aufgelegten Augen/Brauen
-  // mit dem Gesicht (die früheren Halskanten-Fransen stammten vom alten
-  // MarchingCubes-Pfad). Eigene Auflösung: er füllt sein Volumen so effizient,
-  // dass Standard-230 auf ~160k Quads explodiert
-  kopf: { resolution: 190 }
+  drache: { size: 1.45 },
+  roboter: { remesh: true }
 };
 
 var SCULPT_TOOLS = [
@@ -395,14 +397,7 @@ class SculptItGui {
         self._loading.classList.add('visible');
         window.setTimeout(function () {
           try {
-            if (cfg.remesh === false) {
-              for (var i = 0; i < newMeshes.length; ++i) {
-                while (newMeshes[i].getNbFaces() < 25000 && newMeshes[i].addLevel)
-                  newMeshes[i].addLevel();
-              }
-              self._normalizeSize(newMeshes, cfg.size);
-              main.setMesh(newMeshes[newMeshes.length - 1]);
-            } else {
+            if (cfg.remesh) {
               // die Low-Poly-Quelle (~5k) erst per Subdivision runden - sonst
               // tastet das Voxelgrid ihre Polygon-Facetten ab und die Figur
               // wirkt "beulig"
@@ -412,6 +407,13 @@ class SculptItGui {
               }
               var mesh = Merge.remeshAll(main, cfg.resolution || Merge.STARTER_RESOLUTION, true);
               if (mesh) self._normalizeSize([mesh], cfg.size);
+            } else {
+              for (var i = 0; i < newMeshes.length; ++i) {
+                while (newMeshes[i].getNbFaces() < 25000 && newMeshes[i].addLevel)
+                  newMeshes[i].addLevel();
+              }
+              self._normalizeSize(newMeshes, cfg.size);
+              main.setMesh(newMeshes[newMeshes.length - 1]);
             }
           } finally {
             self._loading.classList.remove('visible');
@@ -452,7 +454,7 @@ class SculptItGui {
 
   mergeAndSculpt() {
     var main = this._main;
-    if (main.getMeshes().length <= 1) {
+    if (main.getMeshes().length === 0) {
       this.setMode('kneten');
       return;
     }
@@ -695,6 +697,23 @@ class SculptItGui {
       b.addEventListener('click', function () { self.setPaintColor(entry[1], b); });
       swatchRow.appendChild(b);
     });
+    // freie Farbauswahl: nativer Farbwähler hinter einem Regenbogen-Knopf
+    var customWrap = el('label', 'sit-swatch sit-swatch-custom');
+    var customInput = el('input');
+    customInput.type = 'color';
+    customInput.value = '#ff8800';
+    customInput.addEventListener('input', function () {
+      var hex = customInput.value;
+      customWrap.style.background = hex;
+      self.setPaintColor([
+        parseInt(hex.substr(1, 2), 16) / 255,
+        parseInt(hex.substr(3, 2), 16) / 255,
+        parseInt(hex.substr(5, 2), 16) / 255
+      ], customWrap);
+    });
+    customWrap.appendChild(customInput);
+    swatchRow.appendChild(customWrap);
+
     this.setPaintColor(PAINT_COLORS[0][1], swatchRow.firstChild);
     bar.appendChild(swatchRow);
 

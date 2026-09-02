@@ -88,8 +88,8 @@ Merge.mergeAll = function (main) {
   var meshes = main.getMeshes();
   if (meshes.length === 0)
     return null;
-  if (meshes.length === 1)
-    return meshes[0]; // nichts zu verschmelzen
+  // auch bei EINEM Mesh remeshen: so kann man aufgelegte Details eines
+  // Starters (Brauen, Augen) bewusst mit der Oberfläche verschmelzen
   return Merge.remeshAll(main, Merge.RESOLUTION, true);
 };
 
