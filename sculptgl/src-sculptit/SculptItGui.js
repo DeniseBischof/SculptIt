@@ -40,6 +40,7 @@ var ICONS = {
   redo: svg('<path d="M16 5l5 5-5 5"/><path d="M21 10H10a6 6 0 0 0-6 6v3"/>'),
   export: svg('<path d="M12 15V3M12 3L8 7M12 3l4 4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>'),
   verbinden: svg('<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>'),
+  ausstechen: svg('<circle cx="6" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><path d="M8.2 7.6L20 18M8.2 16.4L20 6"/>'),
   mensch: svg('<circle cx="12" cy="5.5" r="2.8"/><path d="M12 8.5v7M12 15.5l-3.5 5M12 15.5l3.5 5M7 11h10"/>'),
   // "dog" aus dem Lucide-Icon-Set (ISC-Lizenz, lucide.dev)
   hund: svg('<path d="M11.25 16.25h1.5L12 17z"/><path d="M16 14v.5"/><path d="M4.42 11.247A13.152 13.152 0 0 0 4 14.556C4 18.728 7.582 21 12 21s8-2.272 8-6.444a11.702 11.702 0 0 0-.493-3.309"/><path d="M8 14v.5"/><path d="M8.5 8.5c-.384 1.05-1.083 2.028-2.344 2.5-1.931.722-3.576-.297-3.656-1-.113-.994 1.177-6.53 4-7 1.923-.321 3.651.845 3.651 2.235A7.497 7.497 0 0 1 14 5.277c0-1.39 1.844-2.598 3.767-2.277 2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.855-1.45-2.239-2.5"/>'),
@@ -452,6 +453,26 @@ class SculptItGui {
     this.updateMeshInfo();
   }
 
+  // "Ausstechen": aktive Form wird von allen anderen abgezogen (Keks-Ausstecher)
+  cutOut() {
+    var main = this._main;
+    if (!main.getMesh() || main.getMeshes().length < 2)
+      return;
+    this._loadingText.textContent = 'Wird ausgestochen …';
+    this._loading.classList.add('visible');
+    var self = this;
+    window.setTimeout(function () {
+      try {
+        Merge.subtract(main);
+      } finally {
+        self._loading.classList.remove('visible');
+      }
+      main.render();
+      self._selectBuildTool('bewegen'); // im Bauen-Modus bleiben, weiterbauen
+      self.updateMeshInfo();
+    }, 60);
+  }
+
   mergeAndSculpt() {
     var main = this._main;
     if (main.getMeshes().length === 0) {
@@ -636,6 +657,8 @@ class SculptItGui {
     build.appendChild(this._iconBtn('groesse', 'Größe', '', function () { self._selectBuildTool('groesse'); }));
     build.appendChild(this._iconBtn('kopieren', 'Kopieren', '', this.duplicate.bind(this)));
     build.appendChild(this._iconBtn('loeschen', 'Löschen', '', this.remove.bind(this)));
+    build.appendChild(el('div', 'sit-sep'));
+    build.appendChild(this._iconBtn('ausstechen', 'Ausstechen', '', this.cutOut.bind(this)));
     bar.appendChild(build);
 
     // Kneten-Werkzeuge

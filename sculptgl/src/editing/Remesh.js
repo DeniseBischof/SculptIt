@@ -480,4 +480,13 @@ Remesh.mergeMeshes = function (meshes, baseMesh) {
   return createMesh(baseMesh, arr.faces, arr.vertices, arr.colors, arr.materials);
 };
 
+// SculptIt: interne Bausteine für den "Ausstechen"-Modus (CSG-Subtraktion in
+// src-sculptit/Merge.js) - rein additive Re-Exports, Verhalten unverändert
+Remesh._prepareMeshes = prepareMeshes;
+Remesh._createVoxelData = createVoxelData;
+Remesh._voxelize = voxelize;
+Remesh._floodFill = floodFill;
+Remesh._createMesh = createMesh;
+Remesh._alignMeshBound = alignMeshBound;
+
 export default Remesh;

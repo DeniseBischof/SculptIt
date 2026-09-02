@@ -1,4 +1,5 @@
 import Remesh from 'editing/Remesh';
+import SurfaceNets from 'editing/SurfaceNets';
 import Mesh from 'mesh/Mesh';
 import MeshStatic from 'mesh/meshStatic/MeshStatic';
 import Smooth from 'editing/tools/Smooth';
@@ -75,6 +76,75 @@ Merge.remeshAll = function (main, resolution, surfaceNets) {
   var newMesh = Remesh.remesh(statics, statics[0], !surfaceNets);
   Remesh.RESOLUTION = keepRes;
 
+  smoothPass(newMesh);
+
+  meshes.length = 0;
+  main.getStateManager().pushStateAddRemove(newMesh, old);
+  meshes.push(newMesh);
+  main.setMesh(newMesh);
+  return newMesh;
+};
+
+// "Ausstechen": das aktive Mesh wird als Negativform von allen anderen
+// abgezogen (CSG-Differenz). Nutzt die von Remesh.js re-exportierten
+// Bausteine: beide Gruppen werden ins SELBE Voxelgrid gerechnet, dann
+// d = max(dRest, -dAusstecher) - Standard-SDF-Subtraktion.
+// Achtung: Utils.getMemory liefert einen GETEILTEN Buffer, deshalb muss
+// das erste Distanzfeld kopiert werden, bevor das zweite entsteht.
+var subtractRemesh = function (keepMeshes, cutMeshes, baseMesh) {
+  var all = keepMeshes.concat(cutMeshes);
+  var box = Remesh._prepareMeshes(all); // schließt Löcher, backt Transforms ein, mutiert das Array
+  var keepPrepared = all.slice(0, keepMeshes.length);
+  var cutPrepared = all.slice(keepMeshes.length);
+  var i = 0;
+
+  var voxels = Remesh._createVoxelData(box);
+  for (i = 0; i < keepPrepared.length; ++i)
+    Remesh._voxelize(keepPrepared[i], voxels);
+  Remesh._floodFill(voxels);
+  var dKeep = new Float32Array(voxels.distanceField);
+  var cKeep = new Float32Array(voxels.colorField);
+  var mKeep = new Float32Array(voxels.materialField);
+
+  var voxelsCut = Remesh._createVoxelData(box);
+  for (i = 0; i < cutPrepared.length; ++i)
+    Remesh._voxelize(cutPrepared[i], voxelsCut);
+  Remesh._floodFill(voxelsCut);
+
+  var df = voxelsCut.distanceField;
+  for (i = 0; i < df.length; ++i)
+    df[i] = Math.max(dKeep[i], -df[i]);
+  voxelsCut.colorField.set(cKeep);
+  voxelsCut.materialField.set(mKeep);
+
+  SurfaceNets.BLOCK = false;
+  var res = SurfaceNets.computeSurface(voxelsCut);
+  var nmesh = Remesh._createMesh(baseMesh, res.faces, res.vertices, res.colors, res.materials);
+  Remesh._alignMeshBound(nmesh, box);
+  return nmesh;
+};
+
+Merge.subtract = function (main, resolution) {
+  var meshes = main.getMeshes();
+  var cutter = main.getMesh();
+  if (!cutter || meshes.length < 2)
+    return null;
+
+  var old = meshes.slice();
+  var keep = [];
+  for (var i = 0; i < old.length; ++i) {
+    if (old[i] !== cutter)
+      keep.push(toStatic(old[i]));
+  }
+
+  var keepRes = Remesh.RESOLUTION;
+  Remesh.RESOLUTION = resolution || Merge.RESOLUTION;
+  var newMesh = subtractRemesh(keep, [toStatic(cutter)], keep[0]);
+  Remesh.RESOLUTION = keepRes;
+
+  // 2x: die max()-Naht der CSG-Differenz ist nicht glatt, an der
+  // Schnittkante bleiben sonst Zacken
+  smoothPass(newMesh);
   smoothPass(newMesh);
 
   meshes.length = 0;
