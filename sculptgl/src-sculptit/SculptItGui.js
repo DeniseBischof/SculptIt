@@ -5,6 +5,7 @@ import { saveAs } from 'file-saver';
 import Shapes from './Shapes';
 import Merge from './Merge';
 import Presets from './Presets';
+import Autosave from './Autosave';
 
 // SculptItGui ersetzt die yagui-basierte Gui-Klasse von SculptGL komplett.
 // Schnittstelle zum Core (siehe docs/ui-plan.md):
@@ -37,14 +38,16 @@ var ICONS = {
   export: svg('<path d="M12 15V3M12 3L8 7M12 3l4 4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>'),
   verbinden: svg('<circle cx="9" cy="12" r="5.5"/><circle cx="15" cy="12" r="5.5"/>'),
   mensch: svg('<circle cx="12" cy="5.5" r="2.8"/><path d="M12 8.5v7M12 15.5l-3.5 5M12 15.5l3.5 5M7 11h10"/>'),
-  hund: svg('<path d="M4 17V9l3-3h7l4 3h3v3h-3l-1 5"/><path d="M7 17v3M15 17v3M4 9l-1.5-3"/>'),
+  hund: svg('<circle cx="12" cy="11.5" r="6.5"/><path d="M6.9 6.3C4.2 7.1 3.5 11 5.5 13.6M17.1 6.3c2.7 .8 3.4 4.7 1.4 7.3"/><ellipse cx="12" cy="14" rx="2.7" ry="1.9"/><circle cx="12" cy="13.2" r="0.55" fill="currentColor"/>'),
   katze: svg('<circle cx="12" cy="13" r="6.5"/><path d="M7 9l-1-5 4 2.5M17 9l1-5-4 2.5"/>'),
   kreatur: svg('<circle cx="12" cy="13" r="6.5"/><path d="M8 7L5 3M16 7l3-4M9 3.5L8 7M15 3.5L16 7"/><circle cx="10" cy="12" r="0.5" fill="currentColor"/><circle cx="14" cy="12" r="0.5" fill="currentColor"/>'),
   oeffnen: svg('<path d="M3 8V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2"/><path d="M3 8h18l-2 11H5L3 8z"/>'),
   auto: svg('<path d="M3 16v-2.5L5 9h9l4 4.5h3V16"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 17h6M3 16h2M21 16h-2"/>'),
   kopf: svg('<circle cx="12" cy="9" r="5.5"/><path d="M7 21c0-3 2-4.5 5-4.5s5 1.5 5 4.5"/>'),
   roboter: svg('<rect x="6" y="8" width="12" height="10" rx="2"/><circle cx="10" cy="13" r="1" fill="currentColor"/><circle cx="14" cy="13" r="1" fill="currentColor"/><path d="M12 8V4M9.5 4h5"/>'),
-  zeigen: svg('<rect x="7" y="9" width="10" height="7" rx="2"/><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>')
+  zeigen: svg('<rect x="7" y="9" width="10" height="7" rx="2"/><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>'),
+  heim: svg('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>'),
+  weiter: svg('<circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5V8.5z" fill="currentColor"/>')
 };
 
 // Bauen-Modus: ein Gizmo-Modus pro Button - Kinder wollen zuerst schieben,
@@ -102,6 +105,43 @@ class SculptItGui {
     window.addEventListener('resize', this._main.onCanvasResize.bind(this._main), false);
 
     this.setMode('kneten');
+
+    Autosave.start(this._main);
+    this._refreshResumeCard();
+  }
+
+  // zeigt den Startbildschirm wieder an (Home-Button)
+  showStart() {
+    this._refreshResumeCard();
+    this._start.classList.remove('hidden');
+  }
+
+  // "Weitermachen"-Karte einblenden/aktualisieren, wenn ein Spielstand existiert
+  _refreshResumeCard() {
+    var self = this;
+    Autosave.probe(function (date) {
+      if (!date) return;
+      var when = new Date(date).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      if (self._resumeCard) {
+        self._resumeCard.querySelector('.sit-card-sub').textContent = 'Stand ' + when + ' Uhr';
+        return;
+      }
+      var c = document.createElement('button');
+      c.className = 'sit-card sit-card-resume';
+      c.innerHTML = '<span class="sit-card-icon">' + ICONS.weiter + '</span><span class="sit-card-label">Weitermachen</span>' +
+        '<span class="sit-card-sub">Stand ' + when + ' Uhr</span>';
+      c.addEventListener('click', function () {
+        self._start.classList.add('hidden');
+        Autosave.restore(self._main, function (ok) {
+          if (!ok) return;
+          self.setMode('kneten');
+          self._fitCamera();
+          self.updateMeshInfo();
+        });
+      });
+      self._resumeCard = c;
+      self._startGrid.insertBefore(c, self._startGrid.firstChild);
+    });
   }
 
   callFunc(func, event) {
@@ -272,11 +312,12 @@ class SculptItGui {
         main.clearScene();
         var newMeshes = main.loadScene(xhr.response, 'obj');
         // Starter-OBJs sind low-poly (~5k Faces) - zum Kneten nachverdichten
-        // (gleicher Weg wie der Subdivide-Button in GuiTopology)
+        // (gleicher Weg wie der Subdivide-Button in GuiTopology).
+        // 25000 => zwei Level (~84k): fein genug zum Aufbauen ohne Klumpen
         if (newMeshes) {
           for (var i = 0; i < newMeshes.length; ++i) {
             var m = newMeshes[i];
-            while (m.getNbFaces() < 15000 && m.addLevel)
+            while (m.getNbFaces() < 25000 && m.addLevel)
               m.addLevel();
           }
           main.setMesh(newMeshes[newMeshes.length - 1]);
@@ -427,6 +468,10 @@ class SculptItGui {
     var bar = el('div', 'sit-topbar');
 
     bar.appendChild(el('div', 'sit-brand', 'Sculpt<b>It</b>'));
+
+    var homeBtn = el('button', 'sit-btn sit-btn-flat', '<span class="sit-icon">' + ICONS.heim + '</span><span class="sit-label">Start</span>');
+    homeBtn.addEventListener('click', this.showStart.bind(this));
+    bar.appendChild(homeBtn);
 
     var history = el('div', 'sit-history');
     var undoBtn = el('button', 'sit-btn sit-btn-flat', '<span class="sit-icon">' + ICONS.undo + '</span><span class="sit-label">Rückgängig</span>');
@@ -582,9 +627,15 @@ class SculptItGui {
     var overlay = this._start = el('div', 'sit-start');
     var box = el('div', 'sit-start-box');
     box.appendChild(el('h1', 'sit-start-title', 'Was möchtest du machen?'));
-    var grid = el('div', 'sit-start-grid');
+    var grid = this._startGrid = el('div', 'sit-start-grid');
     var self = this;
     var main = this._main;
+
+    // Klick auf den Hintergrund schließt (nur wenn schon etwas in der Szene ist)
+    overlay.addEventListener('click', function (ev) {
+      if (ev.target === overlay && main.getMeshes().length)
+        overlay.classList.add('hidden');
+    });
 
     var card = function (icon, label, sub, onclick, disabled) {
       var c = el('button', 'sit-card' + (disabled ? ' disabled' : ''));
@@ -602,7 +653,8 @@ class SculptItGui {
     card('hund', 'Hund', 'Zum Loskneten', function () { self.loadStarter('hund'); });
     card('katze', 'Katze', 'Zum Loskneten', function () { self.loadStarter('katze'); });
     card('kreatur', 'Drache', 'Zum Loskneten', function () { self.loadStarter('drache'); });
-    card('auto', 'Auto', 'Zum Loskneten', function () { self.loadStarter('auto'); });
+    // Auto vorerst raus (Hard-Surface knetet sich schlecht) - Datei liegt weiter
+    // in resources/starters/auto.obj, Karte bei Bedarf einfach wieder einfügen
     card('roboter', 'Roboter', 'Zum Loskneten', function () { self.loadStarter('roboter'); });
     card('verbinden', 'Frei bauen', 'Formen zusammensetzen', function () {
       main.clearScene();

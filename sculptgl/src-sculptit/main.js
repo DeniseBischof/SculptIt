@@ -3,6 +3,7 @@ import SculptGL from 'SculptGL';
 import SculptItGui from './SculptItGui';
 import Shapes from './Shapes';
 import Presets from './Presets';
+import Autosave from './Autosave';
 
 // Standard-Look: Pearl-Matcap (grau) statt des "fleischigen" SculptGL-Defaults
 var DEFAULT_MATCAP = Shapes.DEFAULT_MATCAP;
@@ -15,6 +16,10 @@ class SculptItApp extends SculptGL {
   constructor() {
     super();
     this._gui = new SculptItGui(this);
+    // Importe (Starter + eigene Modelle) auf Standardgröße normalisieren -
+    // sonst ist ein geladenes Modell winzig gegenüber den Grundformen
+    // (SculptGL-Default scalecenter=false; Scene.loadScene wertet das Flag aus)
+    this._autoMatrix = true;
   }
 
   // jede neue Form (Grundformen, Duplikate, Start-Kugel) bekommt den Standard-Look;
@@ -38,4 +43,4 @@ class SculptItApp extends SculptGL {
 window.SculptIt = SculptItApp;
 
 // Debug-Zugriff für Konsole/Tests (Instanz selbst liegt auf window.sculptit)
-window.sculptitDev = { Shapes: Shapes, Presets: Presets };
+window.sculptitDev = { Shapes: Shapes, Presets: Presets, Autosave: Autosave };

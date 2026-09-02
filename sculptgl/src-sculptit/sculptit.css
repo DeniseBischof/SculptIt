@@ -321,6 +321,8 @@ html, body {
 .sit-card.disabled { opacity: 0.4; cursor: default; }
 .sit-card.disabled:hover { background: var(--sit-bg-solid); transform: none; }
 
+.sit-card-resume { outline: 2px solid var(--sit-accent); }
+
 .sit-card-icon { width: 44px; height: 44px; color: var(--sit-accent); }
 .sit-card-icon svg { width: 100%; height: 100%; }
 .sit-card-label { font-size: 15px; font-weight: 600; }
