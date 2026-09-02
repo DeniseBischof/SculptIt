@@ -1,4 +1,6 @@
+import { mat4 } from 'gl-matrix';
 import Enums from 'misc/Enums';
+import Utils from 'misc/Utils';
 import Gizmo from 'editing/Gizmo';
 import Export from 'files/Export';
 import { saveAs } from 'file-saver';
@@ -56,6 +58,15 @@ var GIZMO_MODES = {
   bewegen: Gizmo.TRANS_XYZ | Gizmo.PLANE_XYZ,
   drehen: Gizmo.ROT_XYZ | Gizmo.ROT_W,
   groesse: Gizmo.SCALE_XYZW
+};
+
+// Sonderbehandlung pro Starter:
+// - size: Größenfaktor (Modelle mit großer Spannweite macht die Normierung
+//   sonst zu klein, weil die Bounding-Box aufgebläht ist)
+// - remesh false: dünne Flügelmembranen überleben das Voxel-Remesh nicht
+//   (Flood-Fill leckt durch die Löcher) - dann nur Subdivision
+var STARTER_CONFIG = {
+  drache: { size: 1.45, remesh: false }
 };
 
 var SCULPT_TOOLS = [
@@ -272,6 +283,15 @@ class SculptItGui {
     if (!cam._width || !cam._height || !isFinite(cam.computeFrustumFit()))
       main.onCanvasResize();
 
+    // laufende Kamera-Animationen abbrechen: ein Delay-Timer, der mit
+    // NaN-Delta gestartet wurde (z.B. Core-resetCameraMeshes bei kaputter
+    // Projektion), schreibt sonst nach der Heilung weiter NaN zurück
+    if (cam._timers) {
+      for (var t in cam._timers) {
+        if (cam._timers[t]) cam.clearTimerN(t);
+      }
+    }
+
     // vergiftete Werte VOLLSTÄNDIG heilen (trans, offset, center, near/far)
     // und danach view+proj neu aufbauen - sonst rechnet computePosition/
     // optimizeNearFar mit der alten NaN-Matrix weiter
@@ -299,6 +319,22 @@ class SculptItGui {
     main.render();
   }
 
+  // skaliert Meshes so, dass die GRÖSSTE Achse Utils.SCALE*factor misst, und
+  // zentriert sie - anders als Scene.normalizeAndCenterMeshes (Diagonale),
+  // die breite Modelle relativ zu den Grundformen zu klein macht
+  _normalizeSize(meshes, factor) {
+    var main = this._main;
+    var box = main.computeBoundingBoxMeshes(meshes);
+    var max = Math.max(box[3] - box[0], box[4] - box[1], box[5] - box[2]);
+    if (!max) return;
+    var scale = Utils.SCALE * (factor || 1.0) / max;
+    var mCen = mat4.create();
+    mat4.scale(mCen, mCen, [scale, scale, scale]);
+    mat4.translate(mCen, mCen, [-(box[0] + box[3]) * 0.5, -(box[1] + box[4]) * 0.5, -(box[2] + box[5]) * 0.5]);
+    for (var i = 0; i < meshes.length; ++i)
+      mat4.mul(meshes[i].getMatrix(), mCen, meshes[i].getMatrix());
+  }
+
   // Starter: fertiges OBJ aus resources/starters/<name>.obj laden;
   // fehlt die Datei (noch), fällt es auf das Grundformen-Preset zurück
   loadStarter(name) {
@@ -311,19 +347,40 @@ class SculptItGui {
       if (xhr.status === 200 && xhr.response && xhr.response.length > 10) {
         main.clearScene();
         var newMeshes = main.loadScene(xhr.response, 'obj');
-        // Starter-OBJs sind low-poly (~5k Faces) - zum Kneten nachverdichten
-        // (gleicher Weg wie der Subdivide-Button in GuiTopology).
-        // 25000 => zwei Level (~84k): fein genug zum Aufbauen ohne Klumpen
-        if (newMeshes) {
-          for (var i = 0; i < newMeshes.length; ++i) {
-            var m = newMeshes[i];
-            while (m.getNbFaces() < 25000 && m.addLevel)
-              m.addLevel();
-          }
-          main.setMesh(newMeshes[newMeshes.length - 1]);
+        if (!newMeshes) {
+          self.loadPreset(name);
+          return;
         }
-        self.setMode('kneten');
-        self._fitCamera();
+        // Generierte OBJs haben überlappende Teil-Shells (Glanz-Flecken) und
+        // ungleichmäßige Topologie (zackige Sculpt-Striche). Ein Voxel-Remesh
+        // beim Laden heilt beides und liefert gleichmäßige Knet-Quads.
+        // Ausnahme remesh:false (siehe STARTER_CONFIG): nur Subdivision.
+        // Beides läuft im setTimeout: blockiert den Hauptthread ~1-2s, und
+        // der Kamera-Fit funktioniert nur nach abgeschlossenem Load-Task
+        // zuverlässig.
+        var cfg = STARTER_CONFIG[name] || {};
+        self._loadingText.textContent = 'Wird vorbereitet …';
+        self._loading.classList.add('visible');
+        window.setTimeout(function () {
+          try {
+            if (cfg.remesh === false) {
+              for (var i = 0; i < newMeshes.length; ++i) {
+                while (newMeshes[i].getNbFaces() < 25000 && newMeshes[i].addLevel)
+                  newMeshes[i].addLevel();
+              }
+              self._normalizeSize(newMeshes, cfg.size);
+              main.setMesh(newMeshes[newMeshes.length - 1]);
+            } else {
+              var mesh = Merge.remeshAll(main, Merge.STARTER_RESOLUTION);
+              if (mesh) self._normalizeSize([mesh], cfg.size);
+            }
+          } finally {
+            self._loading.classList.remove('visible');
+          }
+          self.setMode('kneten');
+          self._fitCamera();
+          self.updateMeshInfo();
+        }, 60);
       } else {
         self.loadPreset(name);
       }
@@ -385,6 +442,7 @@ class SculptItGui {
   _doMerge() {
     var main = this._main;
     var loading = this._loading;
+    this._loadingText.textContent = 'Formen werden verbunden …';
     loading.classList.add('visible');
     var self = this;
     // Remesh blockiert den Hauptthread - erst Overlay rendern lassen
@@ -597,7 +655,8 @@ class SculptItGui {
     var overlay = this._loading = el('div', 'sit-loading');
     var box = el('div', 'sit-loading-box');
     box.appendChild(el('div', 'sit-spinner'));
-    box.appendChild(el('div', 'sit-loading-text', 'Formen werden verbunden …'));
+    this._loadingText = el('div', 'sit-loading-text', 'Formen werden verbunden …');
+    box.appendChild(this._loadingText);
     overlay.appendChild(box);
     this._root.appendChild(overlay);
   }

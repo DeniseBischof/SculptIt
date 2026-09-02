@@ -12,6 +12,9 @@ var Merge = {};
 // alten Geräten zu langsam).
 Merge.RESOLUTION = 100;
 
+// Starter-Modelle beim Laden: feiner, damit Gesichts-Details überleben
+Merge.STARTER_RESOLUTION = 150;
+
 // Dynamic-Topology-Meshes können nicht direkt in den Remesher
 // (gleiche Logik wie GuiTopology.convertToStaticMesh)
 var toStatic = function (mesh) {
@@ -35,20 +38,22 @@ var toStatic = function (mesh) {
   return newMesh;
 };
 
+// Voxel-Remesh über alle Meshes der Szene - auch mit nur EINEM Mesh sinnvoll:
+// verschmilzt überlappende Teil-Shells (Flecken-Artefakte), schließt Löcher
+// und ersetzt ungleichmäßige Import-Topologie durch gleichmäßige Knet-Quads
+// (zackige Sculpt-Striche auf generierten Modellen).
 // Blockiert den Hauptthread für ~1-2s - der Aufrufer zeigt vorher das
 // Lade-Overlay und ruft uns per setTimeout auf.
-Merge.mergeAll = function (main) {
+Merge.remeshAll = function (main, resolution) {
   var meshes = main.getMeshes();
   if (meshes.length === 0)
     return null;
-  if (meshes.length === 1)
-    return meshes[0]; // nichts zu verschmelzen
 
   var old = meshes.slice();
   var statics = old.map(toStatic);
 
   var keepRes = Remesh.RESOLUTION;
-  Remesh.RESOLUTION = Merge.RESOLUTION;
+  Remesh.RESOLUTION = resolution || Merge.RESOLUTION;
   // manifold=true: MarchingCubes + tangentiales Smoothing (glatteres Ergebnis)
   var newMesh = Remesh.remesh(statics, statics[0], true);
   Remesh.RESOLUTION = keepRes;
@@ -58,6 +63,15 @@ Merge.mergeAll = function (main) {
   meshes.push(newMesh);
   main.setMesh(newMesh);
   return newMesh;
+};
+
+Merge.mergeAll = function (main) {
+  var meshes = main.getMeshes();
+  if (meshes.length === 0)
+    return null;
+  if (meshes.length === 1)
+    return meshes[0]; // nichts zu verschmelzen
+  return Merge.remeshAll(main, Merge.RESOLUTION);
 };
 
 export default Merge;
